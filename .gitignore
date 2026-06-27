@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+insightdesk/data/*.duckdb
+insightdesk/data/*.parquet
+traces.jsonl
+.venv/

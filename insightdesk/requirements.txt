@@ -1,0 +1,15 @@
+# --- core demo backend (always-on public demo) ---
+duckdb>=1.0
+pandas>=2.0
+pyarrow>=15.0
+numpy>=1.26
+
+# --- production showcase backend (optional) ---
+elasticsearch>=8.0
+
+# --- agent layer ---
+google-genai>=0.3            # current unified Gemini SDK (uses your AI Studio key)
+
+# --- web demo + deployment (Day 5) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29

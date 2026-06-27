@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>InsightDesk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink: #0f1620; --surface: #18222e; --surface-2: #1f2c3a;
+    --line: #2a3a4d; --text: #e6edf3; --muted: #8696a7;
+    --signal: #4ea1d3; --anomaly: #f5a623; --anomaly-soft: rgba(245,166,35,.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--text);
+    font-family: Inter, system-ui, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 840px; margin: 0 auto; padding: 28px 20px 96px; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  h1 {
+    font-family: "Space Grotesk", sans-serif; font-weight: 700;
+    font-size: 1.5rem; letter-spacing: -.01em; margin: 0;
+  }
+  .tag {
+    font-family: "JetBrains Mono", monospace; font-size: .72rem;
+    color: var(--anomaly); border: 1px solid var(--line);
+    padding: 2px 8px; border-radius: 999px;
+  }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 22px; }
+  .feed { display: flex; flex-direction: column; gap: 16px; }
+  .msg { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); }
+  .msg.you { background: var(--surface-2); align-self: flex-end; max-width: 85%; }
+  .msg.bot { background: var(--surface); }
+  .msg .who {
+    font-family: "JetBrains Mono", monospace; font-size: .68rem;
+    text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .spec {
+    font-family: "JetBrains Mono", monospace; font-size: .74rem;
+    color: var(--signal); background: #0d141d; border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; margin-top: 10px; overflow-x: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .anom {
+    margin-top: 10px; font-size: .86rem; color: var(--anomaly);
+    background: var(--anomaly-soft); border-left: 2px solid var(--anomaly);
+    padding: 8px 12px; border-radius: 0 8px 8px 0;
+  }
+  .chart-card {
+    margin-top: 12px; background: #0d141d; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px;
+  }
+  form {
+    position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink);
+    border-top: 1px solid var(--line); padding: 14px 20px;
+  }
+  .bar { max-width: 840px; margin: 0 auto; display: flex; gap: 10px; }
+  input[type=text] {
+    flex: 1; background: var(--surface); border: 1px solid var(--line);
+    color: var(--text); border-radius: 10px; padding: 12px 14px; font-size: .95rem;
+    font-family: Inter, sans-serif;
+  }
+  input[type=text]:focus { outline: 2px solid var(--signal); outline-offset: 1px; }
+  button {
+    background: var(--signal); color: #06121c; border: 0; border-radius: 10px;
+    padding: 0 18px; font-weight: 600; font-family: "Space Grotesk", sans-serif;
+    cursor: pointer; font-size: .95rem;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .hint { color: var(--muted); font-size: .82rem; }
+  .hint b { color: var(--text); font-weight: 500; }
+  .seed { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+  .seed button {
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 12px; font-size: .8rem; font-family: Inter;
+    font-weight: 400;
+  }
+  .seed button:hover { color: var(--text); border-color: var(--signal); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>InsightDesk</h1><span class="tag">anomaly-aware</span>
+  </header>
+  <p class="sub">Ask about messaging volume and billing in plain English. Answers
+    come only from the data; anomalies are flagged in <span style="color:var(--anomaly)">amber</span>.</p>
+
+  <div class="seed" id="seed">
+    <button>Total cost per region</button>
+    <button>Monthly cost trend for Europe</button>
+    <button>Daily SMS volume for Falcon Media in early April</button>
+  </div>
+
+  <div class="feed" id="feed"></div>
+</div>
+
+<form id="form">
+  <div class="bar">
+    <input type="text" id="q" autocomplete="off"
+           placeholder="e.g. Which region bills the most?" />
+    <button type="submit" id="send">Ask</button>
+  </div>
+</form>
+
+<script>
+const sessionId = "s-" + Math.random().toString(36).slice(2);
+const feed = document.getElementById("feed");
+const form = document.getElementById("form");
+const input = document.getElementById("q");
+const send = document.getElementById("send");
+
+document.getElementById("seed").addEventListener("click", e => {
+  if (e.target.tagName === "BUTTON") { input.value = e.target.textContent; input.focus(); }
+});
+
+function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html) d.innerHTML = html; return d; }
+
+function addYou(text) {
+  const m = el("msg you"); m.appendChild(el("who", "You"));
+  const p = document.createElement("div"); p.textContent = text; m.appendChild(p);
+  feed.appendChild(m); window.scrollTo(0, document.body.scrollHeight);
+}
+
+function addBot(data) {
+  const m = el("msg bot"); m.appendChild(el("who", "InsightDesk"));
+  const ans = document.createElement("div"); ans.textContent = data.answer; m.appendChild(ans);
+
+  if (data.anomalies && data.anomalies.length) {
+    const a = data.anomalies[0];
+    m.appendChild(el("anom",
+      `Anomaly: <b>${a.label}</b> reads as a <b>${a.direction}</b> versus the baseline.`));
+  }
+  if (data.chart) m.appendChild(renderChart(data.chart));
+  if (data.spec) {
+    const s = el("spec"); s.textContent = "query " + JSON.stringify(compactSpec(data.spec));
+    m.appendChild(s);
+  }
+  feed.appendChild(m); window.scrollTo(0, document.body.scrollHeight);
+}
+
+function compactSpec(s) {
+  const o = { agg: s.agg, metric: s.metric };
+  if (s.group_by && s.group_by.length) o.group_by = s.group_by;
+  if (s.filters && s.filters.length) o.filters = s.filters.map(f => `${f.field}${f.op==="eq"?"=":" "+f.op+" "}${f.value}`);
+  return o;
+}
+
+function renderChart(c) {
+  const card = el("chart-card");
+  const canvas = document.createElement("canvas"); card.appendChild(canvas);
+  const signal = "#4ea1d3", anomaly = "#f5a623";
+  const isAnom = i => c.anomaly_indices.includes(i);
+  const colors = c.values.map((_, i) => isAnom(i) ? anomaly : signal);
+  setTimeout(() => {
+    new Chart(canvas, {
+      type: c.type,
+      data: {
+        labels: c.labels,
+        datasets: [{
+          label: c.metric, data: c.values,
+          backgroundColor: c.type === "bar" ? colors : "rgba(78,161,211,.12)",
+          borderColor: c.type === "line" ? signal : colors,
+          pointBackgroundColor: colors,
+          pointRadius: c.type === "line" ? c.values.map((_, i) => isAnom(i) ? 6 : 3) : undefined,
+          borderWidth: 2, tension: .25, fill: c.type === "line",
+        }]
+      },
+      options: {
+        plugins: { legend: { labels: { color: "#8696a7" } } },
+        scales: {
+          x: { ticks: { color: "#8696a7", maxRotation: 0, autoSkip: true }, grid: { color: "#22303f" } },
+          y: { ticks: { color: "#8696a7" }, grid: { color: "#22303f" } }
+        }
+      }
+    });
+  }, 0);
+  return card;
+}
+
+async function ask(question) {
+  addYou(question);
+  send.disabled = true; input.value = "";
+  const thinking = el("msg bot", '<div class="who">InsightDesk</div><div style="color:#8696a7">analyzing…</div>');
+  feed.appendChild(thinking); window.scrollTo(0, document.body.scrollHeight);
+  try {
+    const res = await fetch("/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, session_id: sessionId })
+    });
+    const data = await res.json();
+    thinking.remove();
+    addBot(data);
+  } catch (err) {
+    thinking.remove();
+    addBot({ answer: "Something went wrong reaching the server. Check it's running and try again." });
+  } finally { send.disabled = false; input.focus(); }
+}
+
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  const q = input.value.trim();
+  if (q) ask(q);
+});
+</script>
+</body>
+</html>
