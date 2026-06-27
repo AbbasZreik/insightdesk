@@ -22,7 +22,7 @@ from ..backends.duckdb_backend import DuckDBBackend
 from ..agent.llm import LLM, MockLLM
 from ..agent.spec_agent import SpecError, text_to_spec
 from .cases import CASES, EvalCase
-import time
+
 DB = "insightdesk/data/insightdesk.duckdb"
 
 
@@ -106,7 +106,6 @@ def main() -> None:
     print(f"{'cat':<12} {'result':<6} question")
     print("-" * 70)
     for case in CASES:
-        time.sleep(13)
         ok, detail = _check(case, schema, llm)
         by_cat[case.category].append(ok)
         mark = "PASS" if ok else "FAIL"

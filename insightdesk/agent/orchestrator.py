@@ -15,6 +15,7 @@ from ..backends.base import AggregationBackend, AggregationSpec
 from .anomaly import detect_anomalies
 from .llm import LLM
 from .prompts import build_narrator_system, build_narrator_user
+from .skills import AnomalySkill, apply_skill
 from .spec_agent import SpecError, text_to_spec
 from .trace import NullTracer, TraceEvent, Tracer
 
@@ -35,6 +36,7 @@ class InsightAgent:
     history: list[Turn] = field(default_factory=list)
     memory_turns: int = 3            # how many prior turns to carry as context
     tracer: Tracer = field(default_factory=NullTracer)
+    anomaly_skill: AnomalySkill | None = None   # None -> auto statistical detection
 
     def _question_with_memory(self, question: str) -> str:
         if not self.history:
@@ -70,7 +72,11 @@ class InsightAgent:
             event.tool_calls.append("run_aggregation")
             event.row_count = len(rows)
 
-            anomalies = detect_anomalies(rows, spec.group_by)
+            if self.anomaly_skill is not None:
+                anomalies = apply_skill(self.anomaly_skill, rows, spec.group_by)
+                event.tool_calls.append(f"skill:{self.anomaly_skill.name}")
+            else:
+                anomalies = detect_anomalies(rows, spec.group_by)
             event.anomaly_count = len(anomalies)
 
             answer = self.narrate(question, rows, anomalies)

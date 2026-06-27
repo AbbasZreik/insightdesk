@@ -44,6 +44,10 @@ def main() -> None:
     ap.add_argument("--db", default=DB)
     ap.add_argument("--model", default=DEFAULT_MODEL)
     ap.add_argument("--debug", action="store_true", help="show spec + row count")
+    ap.add_argument("--skill", default=None,
+                    help="anomaly skill: a built-in name (auto, sharp_drop, "
+                         "sharp_spike, underperformer) or a plain-English rule "
+                         "to compile, e.g. \"flag regions below 80% of the top\"")
     args = ap.parse_args()
 
     try:
@@ -59,6 +63,16 @@ def main() -> None:
         sys.exit(1)
 
     agent = InsightAgent(backend=DuckDBBackend(args.db), llm=llm)
+
+    if args.skill:
+        from .agent.skills import resolve_skill
+        try:
+            agent.anomaly_skill = resolve_skill(args.skill, llm, agent.backend.get_schema())
+            print(f"[anomaly skill: {agent.anomaly_skill.name} — "
+                  f"{agent.anomaly_skill.description}]")
+        except ValueError as e:
+            print(f"error: {e}", file=sys.stderr)
+            sys.exit(1)
 
     def handle(q: str) -> None:
         try:

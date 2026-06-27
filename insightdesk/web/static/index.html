@@ -81,6 +81,19 @@
     font-weight: 400;
   }
   .seed button:hover { color: var(--text); border-color: var(--signal); }
+  .skillbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .skillbar label {
+    font-family: "JetBrains Mono", monospace; font-size: .7rem;
+    text-transform: uppercase; letter-spacing: .07em; color: var(--anomaly);
+    white-space: nowrap;
+  }
+  .skillbar input {
+    flex: 1; background: var(--surface); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: .85rem;
+    font-family: Inter, sans-serif;
+  }
+  .skillbar input:focus { outline: 2px solid var(--anomaly); outline-offset: 1px; }
+  .skill-state { font-size: .75rem; color: var(--muted); white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -96,6 +109,13 @@
     <button>Total cost per region</button>
     <button>Monthly cost trend for Europe</button>
     <button>Daily SMS volume for Falcon Media in early April</button>
+  </div>
+
+  <div class="skillbar">
+    <label for="skill">Anomaly rule</label>
+    <input type="text" id="skill" autocomplete="off"
+           placeholder="optional — e.g. flag regions billing below 80% of the top" />
+    <span class="skill-state" id="skillState"></span>
   </div>
 
   <div class="feed" id="feed"></div>
@@ -187,16 +207,19 @@ function renderChart(c) {
 async function ask(question) {
   addYou(question);
   send.disabled = true; input.value = "";
+  const skill = document.getElementById("skill").value.trim();
   const thinking = el("msg bot", '<div class="who">InsightDesk</div><div style="color:#8696a7">analyzing…</div>');
   feed.appendChild(thinking); window.scrollTo(0, document.body.scrollHeight);
   try {
     const res = await fetch("/ask", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, session_id: sessionId })
+      body: JSON.stringify({ question, session_id: sessionId, anomaly_skill: skill || null })
     });
     const data = await res.json();
     thinking.remove();
     addBot(data);
+    const state = document.getElementById("skillState");
+    state.textContent = data.skill ? `active: ${data.skill}` : "";
   } catch (err) {
     thinking.remove();
     addBot({ answer: "Something went wrong reaching the server. Check it's running and try again." });

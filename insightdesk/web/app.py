@@ -79,6 +79,7 @@ def _chart(turn: Turn) -> dict | None:
 class AskRequest(BaseModel):
     question: str
     session_id: str = "default"
+    anomaly_skill: str | None = None   # built-in name or a plain-English rule
 
 
 @app.get("/")
@@ -91,9 +92,27 @@ def health() -> dict:
     return {"ok": True, "mock": os.environ.get("INSIGHTDESK_MOCK") == "1"}
 
 
+def _apply_skill(agent, source: str | None) -> str | None:
+    """Set the agent's anomaly skill from a name/instruction; cache by source
+    so a custom instruction is compiled at most once per session."""
+    if not source:
+        agent.anomaly_skill = None
+        agent._skill_src = None
+        return None
+    if getattr(agent, "_skill_src", None) != source:
+        from ..agent.skills import resolve_skill
+        agent.anomaly_skill = resolve_skill(source, agent.llm, agent.backend.get_schema())
+        agent._skill_src = source
+    return agent.anomaly_skill.name
+
+
 @app.post("/ask")
 def ask(req: AskRequest) -> dict:
     agent = _agent_for(req.session_id)
+    try:
+        skill_name = _apply_skill(agent, req.anomaly_skill)
+    except ValueError as e:
+        return {"ok": False, "answer": f"Couldn't apply that anomaly rule: {e}"}
     try:
         turn = agent.ask(req.question)
     except SpecError as e:
@@ -105,6 +124,7 @@ def ask(req: AskRequest) -> dict:
         "rows": turn.rows[:50],
         "anomalies": turn.anomalies,
         "chart": _chart(turn),
+        "skill": skill_name,
     }
 
 

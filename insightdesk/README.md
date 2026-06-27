@@ -85,7 +85,8 @@ insightdesk/
   agent/llm.py                 LLM interface, GeminiLLM (your key), MockLLM
   agent/prompts.py             schema-aware spec + grounded-narration prompts
   agent/spec_agent.py          NL -> validated spec, with self-repair retry
-  agent/anomaly.py             deterministic anomaly detection
+  agent/anomaly.py             deterministic anomaly detection (statistics)
+  agent/skills.py              anomaly Skills: named/instruction-defined detectors
   agent/orchestrator.py        InsightAgent: ties it together + session memory
   agent/trace.py               structured JSONL tracing (observability)
   eval/cases.py                question -> expected-spec eval set
@@ -103,14 +104,18 @@ insightdesk/
   two tools; expose them over MCP.
 - **Sessions & memory (Day 3)** — multi-turn follow-ups ("now break that down by
   region") reuse prior context.
-- **Quality & guardrails (Day 4)** — `validate_spec()` rejects any out-of-schema
-  field, metric, value, or limit before a query runs; add an eval set of
-  question → expected-spec pairs.
-- **Prototype → production (Day 5)** — tool-call logging + the dual-backend design
+- **Skills (Day 3)** — anomaly detection is a library of named, reusable skills
+  (`agent/skills.py`); an analyst can define a new one in plain English ("flag
+  regions billing below 80% of the top"), which the model compiles once into a
+  validated rule, then applies deterministically.
+- **Quality & guardrails (Day 4)** — `validate_spec()` and `validate_rule()`
+  reject anything off-schema or malformed before it runs; an eval set scores
+  query accuracy.
+- **Prototype → production (Day 5)** — tool-call tracing + the dual-backend design
   + the deployed live link.
 
-The anomaly-detection layer (z-score / IQR over aggregation results, narrated by
-the agent) is the differentiator on top of the required concepts.
+The anomaly-detection layer (statistical or skill-defined, narrated by the
+agent) is the differentiator on top of the required concepts.
 
 ## Status
 
