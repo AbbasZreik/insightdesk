@@ -35,42 +35,11 @@ class MonitorRule:
 # Starter rule set (SMS-firewall style)
 # --------------------------------------------------------------------------
 
-RULES: list[MonitorRule] = [
-    MonitorRule(
-        name="route_degradation",
-        description="Flag a client route whose delivery rate drops below 65%.",
-        kind="delivery_rate_below",
-        scope=["client_id", "country_name", "operator_name"],
-        params={"threshold": 0.65},
-        severity="high", recommended_action="block / reroute", min_sample=40,
-    ),
-    MonitorRule(
-        name="otp_failure",
-        description="Flag OTP/transactional traffic with delivery rate below 80%.",
-        kind="delivery_rate_below",
-        scope=["country_name", "operator_name"],
-        params={"threshold": 0.80},
-        severity="critical", recommended_action="urgent reroute", min_sample=25,
-        content_type="transactional",
-    ),
-    MonitorRule(
-        name="traffic_surge",
-        description="Flag a sender whose volume to a country spikes far above its "
-                    "normal level (possible spam / grey route).",
-        kind="volume_surge",
-        scope=["sender", "country_name"],
-        params={"factor": 4.0},
-        severity="medium", recommended_action="throttle / review", min_sample=50,
-    ),
-    MonitorRule(
-        name="margin_leak",
-        description="Flag a vendor route that is losing money (cost exceeds rate).",
-        kind="negative_margin",
-        scope=["vendor_name", "country_name", "operator_name"],
-        params={},
-        severity="high", recommended_action="reprice / block", min_sample=30,
-    ),
-]
+from ..agent.skill_loader import load_monitor_rule_defs
+
+# Monitoring rules are LOADED from the SKILL.md folder
+# (skills/traffic-monitoring/assets/rules.json), not hardcoded.
+RULES: list[MonitorRule] = [MonitorRule(**d) for d in load_monitor_rule_defs()]
 
 
 def rules_by_name() -> dict[str, MonitorRule]:

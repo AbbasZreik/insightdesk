@@ -1,0 +1,38 @@
+[
+  {
+    "name": "route_degradation",
+    "description": "Flag a client route whose delivery rate drops below 65%.",
+    "kind": "delivery_rate_below",
+    "scope": ["client_id", "country_name", "operator_name"],
+    "params": {"threshold": 0.65},
+    "severity": "high", "recommended_action": "block / reroute",
+    "min_sample": 40, "window_min": 15, "content_type": null
+  },
+  {
+    "name": "otp_failure",
+    "description": "Flag OTP/transactional traffic with delivery rate below 80%.",
+    "kind": "delivery_rate_below",
+    "scope": ["country_name", "operator_name"],
+    "params": {"threshold": 0.80},
+    "severity": "critical", "recommended_action": "urgent reroute",
+    "min_sample": 25, "window_min": 15, "content_type": "transactional"
+  },
+  {
+    "name": "traffic_surge",
+    "description": "Flag a sender whose volume to a country spikes far above normal.",
+    "kind": "volume_surge",
+    "scope": ["sender", "country_name"],
+    "params": {"factor": 4.0},
+    "severity": "medium", "recommended_action": "throttle / review",
+    "min_sample": 50, "window_min": 15, "content_type": null
+  },
+  {
+    "name": "margin_leak",
+    "description": "Flag a vendor route that is losing money (cost exceeds rate).",
+    "kind": "negative_margin",
+    "scope": ["vendor_name", "country_name", "operator_name"],
+    "params": {},
+    "severity": "high", "recommended_action": "reprice / block",
+    "min_sample": 30, "window_min": 15, "content_type": null
+  }
+]

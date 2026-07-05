@@ -1,0 +1,18 @@
+{
+  "auto": {
+    "description": "Automatic statistical detection (z-score on trends, IQR on groups).",
+    "rule": { "type": "auto" }
+  },
+  "sharp_drop": {
+    "description": "Flag any point that falls 30% or more below the typical level.",
+    "rule": { "type": "pct_deviation", "baseline": "median", "direction": "drop", "pct": 0.30 }
+  },
+  "sharp_spike": {
+    "description": "Flag any point at least double the typical level.",
+    "rule": { "type": "pct_deviation", "baseline": "median", "direction": "spike", "pct": 1.0 }
+  },
+  "underperformer": {
+    "description": "Flag any group billing less than half of the top group.",
+    "rule": { "type": "relative_extreme", "reference": "max", "op": "lt", "ratio": 0.5 }
+  }
+}

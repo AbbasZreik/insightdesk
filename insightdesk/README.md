@@ -84,6 +84,23 @@ insightdesk/
   run_agent.py                 reporting CLI
 ```
 
+## Skills (SKILL.md format)
+
+Skills follow the SKILL.md folder structure and are loaded at runtime, not
+hardcoded:
+
+```
+skills/
+  anomaly-detection/     SKILL.md + references/rule_types.md + assets/builtin_skills.json
+  traffic-monitoring/    SKILL.md + assets/rules.json
+```
+
+`agent/skill_loader.py` reads each skill's `SKILL.md` (name/description) and its
+`assets/*.json` definitions. `agent/skills.py::BUILTIN_SKILLS` and
+`monitor/rules.py::RULES` are populated from those folders. Editing a skill's
+JSON asset changes behavior with no code change. Evaluators stay in code
+(deterministic); the model only compiles a new rule from plain English, once.
+
 ## MCP server (read-only)
 
 The system exposes its tools over the Model Context Protocol so any MCP client

@@ -164,21 +164,13 @@ def apply_skill(skill: AnomalySkill, rows: list[dict[str, Any]],
 # Built-in skill library
 # --------------------------------------------------------------------------
 
+from .skill_loader import load_anomaly_skill_defs
+
+# Built-in skills are LOADED from the SKILL.md folder
+# (skills/anomaly-detection/assets/builtin_skills.json), not hardcoded.
 BUILTIN_SKILLS: dict[str, AnomalySkill] = {
-    "auto": AnomalySkill("auto", "Automatic statistical detection (z-score on "
-                         "trends, IQR on groups).", {"type": "auto"}),
-    "sharp_drop": AnomalySkill("sharp_drop", "Flag any point that falls 30% or "
-                               "more below the typical level.",
-                               {"type": "pct_deviation", "baseline": "median",
-                                "direction": "drop", "pct": 0.30}),
-    "sharp_spike": AnomalySkill("sharp_spike", "Flag any point at least double "
-                                "the typical level.",
-                                {"type": "pct_deviation", "baseline": "median",
-                                 "direction": "spike", "pct": 1.0}),
-    "underperformer": AnomalySkill("underperformer", "Flag any group billing "
-                                   "less than half of the top group.",
-                                   {"type": "relative_extreme", "reference": "max",
-                                    "op": "lt", "ratio": 0.5}),
+    name: AnomalySkill(name, d["description"], d["rule"])
+    for name, d in load_anomaly_skill_defs().items()
 }
 
 

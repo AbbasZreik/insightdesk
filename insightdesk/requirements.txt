@@ -16,5 +16,3 @@ uvicorn[standard]>=0.29
 mcp
 pyyaml
 google-adk
-python-dotenv
-
