@@ -1,0 +1,24 @@
+# Shift-left security + hygiene. Install once at the git repo root:
+#   pip install pre-commit && pre-commit install
+# Runs automatically on every `git commit`; run on demand with:
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+      - id: detect-private-key          # block committing secrets/keys
+      - id: check-merge-conflict
+      - id: check-yaml
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.86.0
+    hooks:
+      - id: semgrep
+        name: semgrep (security audit)
+        # Fail the commit on findings from the security rulesets.
+        args: ["--config", "p/python", "--config", "p/security-audit",
+               "--error", "--skip-unknown-extensions", "--quiet"]

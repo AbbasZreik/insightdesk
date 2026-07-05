@@ -13,3 +13,8 @@ google-genai>=0.3            # current unified Gemini SDK (uses your AI Studio k
 # --- web demo + deployment (Day 5) ---
 fastapi>=0.110
 uvicorn[standard]>=0.29
+mcp
+pyyaml
+google-adk
+python-dotenv
+

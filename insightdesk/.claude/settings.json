@@ -1,0 +1,14 @@
+{
+  "//": "Claude Code agent hooks: run security + tests automatically. Adjust to the current Claude Code hooks schema if it differs.",
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "make -C insightdesk security || true" },
+          { "type": "command", "command": "make -C insightdesk test || true" }
+        ]
+      }
+    ]
+  }
+}

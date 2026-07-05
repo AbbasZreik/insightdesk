@@ -3,234 +3,214 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>InsightDesk</title>
+<title>InsightDesk — SMS Traffic</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  :root {
-    --ink: #0f1620; --surface: #18222e; --surface-2: #1f2c3a;
-    --line: #2a3a4d; --text: #e6edf3; --muted: #8696a7;
-    --signal: #4ea1d3; --anomaly: #f5a623; --anomaly-soft: rgba(245,166,35,.14);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--ink); color: var(--text);
-    font-family: Inter, system-ui, sans-serif; line-height: 1.5;
-  }
-  .wrap { max-width: 840px; margin: 0 auto; padding: 28px 20px 96px; }
-  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
-  h1 {
-    font-family: "Space Grotesk", sans-serif; font-weight: 700;
-    font-size: 1.5rem; letter-spacing: -.01em; margin: 0;
-  }
-  .tag {
-    font-family: "JetBrains Mono", monospace; font-size: .72rem;
-    color: var(--anomaly); border: 1px solid var(--line);
-    padding: 2px 8px; border-radius: 999px;
-  }
-  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 22px; }
-  .feed { display: flex; flex-direction: column; gap: 16px; }
-  .msg { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); }
-  .msg.you { background: var(--surface-2); align-self: flex-end; max-width: 85%; }
-  .msg.bot { background: var(--surface); }
-  .msg .who {
-    font-family: "JetBrains Mono", monospace; font-size: .68rem;
-    text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
-    margin-bottom: 6px;
-  }
-  .spec {
-    font-family: "JetBrains Mono", monospace; font-size: .74rem;
-    color: var(--signal); background: #0d141d; border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 10px; margin-top: 10px; overflow-x: auto;
-    white-space: pre-wrap; word-break: break-word;
-  }
-  .anom {
-    margin-top: 10px; font-size: .86rem; color: var(--anomaly);
-    background: var(--anomaly-soft); border-left: 2px solid var(--anomaly);
-    padding: 8px 12px; border-radius: 0 8px 8px 0;
-  }
-  .chart-card {
-    margin-top: 12px; background: #0d141d; border: 1px solid var(--line);
-    border-radius: 10px; padding: 12px;
-  }
-  form {
-    position: fixed; bottom: 0; left: 0; right: 0; background: var(--ink);
-    border-top: 1px solid var(--line); padding: 14px 20px;
-  }
-  .bar { max-width: 840px; margin: 0 auto; display: flex; gap: 10px; }
-  input[type=text] {
-    flex: 1; background: var(--surface); border: 1px solid var(--line);
-    color: var(--text); border-radius: 10px; padding: 12px 14px; font-size: .95rem;
-    font-family: Inter, sans-serif;
-  }
-  input[type=text]:focus { outline: 2px solid var(--signal); outline-offset: 1px; }
-  button {
-    background: var(--signal); color: #06121c; border: 0; border-radius: 10px;
-    padding: 0 18px; font-weight: 600; font-family: "Space Grotesk", sans-serif;
-    cursor: pointer; font-size: .95rem;
-  }
-  button:disabled { opacity: .5; cursor: default; }
-  .hint { color: var(--muted); font-size: .82rem; }
-  .hint b { color: var(--text); font-weight: 500; }
-  .seed { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
-  .seed button {
-    background: transparent; color: var(--muted); border: 1px solid var(--line);
-    border-radius: 999px; padding: 6px 12px; font-size: .8rem; font-family: Inter;
-    font-weight: 400;
-  }
-  .seed button:hover { color: var(--text); border-color: var(--signal); }
-  .skillbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
-  .skillbar label {
-    font-family: "JetBrains Mono", monospace; font-size: .7rem;
-    text-transform: uppercase; letter-spacing: .07em; color: var(--anomaly);
-    white-space: nowrap;
-  }
-  .skillbar input {
-    flex: 1; background: var(--surface); border: 1px solid var(--line);
-    color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: .85rem;
-    font-family: Inter, sans-serif;
-  }
-  .skillbar input:focus { outline: 2px solid var(--anomaly); outline-offset: 1px; }
-  .skill-state { font-size: .75rem; color: var(--muted); white-space: nowrap; }
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  :root{--ink:#0f1620;--surface:#18222e;--surface-2:#1f2c3a;--line:#2a3a4d;
+    --text:#e6edf3;--muted:#8696a7;--signal:#4ea1d3;--amber:#f5a623;--red:#e5534b;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ink);color:var(--text);font-family:Inter,system-ui,sans-serif;line-height:1.5;}
+  .wrap{max-width:880px;margin:0 auto;padding:24px 20px 110px;}
+  header{display:flex;align-items:baseline;gap:12px;}
+  h1{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:1.45rem;margin:0;}
+  .tag{font-family:"JetBrains Mono",monospace;font-size:.7rem;color:var(--amber);
+    border:1px solid var(--line);padding:2px 8px;border-radius:999px;}
+  .sub{color:var(--muted);font-size:.88rem;margin:4px 0 18px;}
+  .tabs{display:flex;gap:8px;margin-bottom:20px;border-bottom:1px solid var(--line);}
+  .tabs button{background:none;border:0;color:var(--muted);padding:10px 14px;font-size:.92rem;
+    font-family:"Space Grotesk",sans-serif;cursor:pointer;border-bottom:2px solid transparent;}
+  .tabs button.active{color:var(--text);border-bottom-color:var(--signal);}
+  .view{display:none;} .view.active{display:block;}
+  /* reporting */
+  .seed{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+  .seed button{background:transparent;color:var(--muted);border:1px solid var(--line);
+    border-radius:999px;padding:6px 12px;font-size:.8rem;font-family:Inter;}
+  .seed button:hover{color:var(--text);border-color:var(--signal);}
+  .feed{display:flex;flex-direction:column;gap:14px;}
+  .msg{padding:13px 15px;border-radius:12px;border:1px solid var(--line);}
+  .msg.you{background:var(--surface-2);align-self:flex-end;max-width:85%;}
+  .msg.bot{background:var(--surface);}
+  .who{font-family:"JetBrains Mono",monospace;font-size:.66rem;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--muted);margin-bottom:6px;}
+  .spec{font-family:"JetBrains Mono",monospace;font-size:.72rem;color:var(--signal);
+    background:#0d141d;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    margin-top:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-word;}
+  .chart-card{margin-top:12px;background:#0d141d;border:1px solid var(--line);border-radius:10px;padding:12px;}
+  form{position:fixed;bottom:0;left:0;right:0;background:var(--ink);border-top:1px solid var(--line);padding:13px 20px;}
+  .bar{max-width:880px;margin:0 auto;display:flex;gap:10px;}
+  input[type=text]{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:11px 14px;font-size:.92rem;font-family:Inter;}
+  input[type=text]:focus{outline:2px solid var(--signal);outline-offset:1px;}
+  button.primary{background:var(--signal);color:#06121c;border:0;border-radius:10px;padding:0 18px;
+    font-weight:600;font-family:"Space Grotesk";cursor:pointer;}
+  /* monitoring */
+  .controls{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .controls button{background:var(--surface-2);color:var(--text);border:1px solid var(--line);
+    border-radius:8px;padding:9px 14px;font-size:.85rem;font-family:"Space Grotesk";cursor:pointer;}
+  .controls button.go{background:var(--signal);color:#06121c;border:0;}
+  .controls .auto.on{background:var(--amber);color:#1a1206;border:0;}
+  .strip{display:flex;gap:18px;flex-wrap:wrap;background:#0d141d;border:1px solid var(--line);
+    border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:.85rem;}
+  .strip .k{color:var(--muted);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;}
+  .strip .v{font-family:"JetBrains Mono",monospace;font-size:1.05rem;}
+  .esc{border:1px solid var(--line);border-radius:10px;padding:13px 15px;margin-bottom:12px;
+    background:var(--surface);border-left:3px solid var(--muted);}
+  .esc.critical{border-left-color:var(--red);} .esc.high{border-left-color:var(--amber);}
+  .esc.medium{border-left-color:var(--signal);}
+  .esc .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .sev{font-family:"JetBrains Mono",monospace;font-size:.64rem;text-transform:uppercase;
+    letter-spacing:.06em;padding:2px 7px;border-radius:4px;color:#06121c;}
+  .sev.critical{background:var(--red);color:#fff;} .sev.high{background:var(--amber);}
+  .sev.medium{background:var(--signal);} .sev.low{background:var(--muted);}
+  .esc .rule{font-family:"Space Grotesk";font-weight:600;}
+  .esc .route{font-family:"JetBrains Mono",monospace;font-size:.8rem;color:var(--muted);}
+  .esc .reason{font-size:.86rem;margin:8px 0;}
+  .esc .act{display:flex;gap:8px;align-items:center;}
+  .esc .rec{font-size:.78rem;color:var(--amber);margin-right:auto;}
+  .esc .act button{border:0;border-radius:7px;padding:7px 13px;font-size:.8rem;cursor:pointer;
+    font-family:"Space Grotesk";font-weight:600;}
+  .block{background:var(--red);color:#fff;} .dismiss{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)!important;}
+  .empty{color:var(--muted);text-align:center;padding:30px;font-size:.9rem;}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>InsightDesk</h1><span class="tag">anomaly-aware</span>
-  </header>
-  <p class="sub">Ask about messaging volume and billing in plain English. Answers
-    come only from the data; anomalies are flagged in <span style="color:var(--anomaly)">amber</span>.</p>
+  <header><h1>InsightDesk</h1><span class="tag">SMS traffic intelligence</span></header>
+  <p class="sub">Report on A2P message traffic, and watch an ambient agent flag
+    bad routes for action.</p>
 
-  <div class="seed" id="seed">
-    <button>Total cost per region</button>
-    <button>Monthly cost trend for Europe</button>
-    <button>Daily SMS volume for Falcon Media in early April</button>
+  <div class="tabs">
+    <button id="tabReport" class="active" onclick="show('report')">Reporting</button>
+    <button id="tabMonitor" onclick="show('monitor')">Monitoring portal</button>
   </div>
 
-  <div class="skillbar">
-    <label for="skill">Anomaly rule</label>
-    <input type="text" id="skill" autocomplete="off"
-           placeholder="optional — e.g. flag regions billing below 80% of the top" />
-    <span class="skill-state" id="skillState"></span>
+  <!-- REPORTING -->
+  <div id="report" class="view active">
+    <div class="seed" id="seed">
+      <button>Delivery rate by country</button>
+      <button>Profit by vendor</button>
+      <button>Delivery rate by operator over time</button>
+    </div>
+    <div class="feed" id="feed"></div>
   </div>
 
-  <div class="feed" id="feed"></div>
+  <!-- MONITORING -->
+  <div id="monitor" class="view">
+    <div class="controls">
+      <button class="go" onclick="feedOnce()">Feed next batch</button>
+      <button class="auto" id="autoBtn" onclick="toggleAuto()">Auto: off</button>
+      <button onclick="resetMon()">Reset</button>
+    </div>
+    <div class="strip" id="strip"><span class="empty">Press “Feed next batch” to start the traffic.</span></div>
+    <div id="escList"></div>
+  </div>
 </div>
 
-<form id="form">
-  <div class="bar">
-    <input type="text" id="q" autocomplete="off"
-           placeholder="e.g. Which region bills the most?" />
-    <button type="submit" id="send">Ask</button>
-  </div>
-</form>
+<form id="form"><div class="bar">
+  <input type="text" id="q" autocomplete="off" placeholder="e.g. Which operator has the worst delivery rate?" />
+  <button type="submit" class="primary" id="send">Ask</button>
+</div></form>
 
 <script>
-const sessionId = "s-" + Math.random().toString(36).slice(2);
-const feed = document.getElementById("feed");
-const form = document.getElementById("form");
-const input = document.getElementById("q");
-const send = document.getElementById("send");
+const sessionId="s-"+Math.random().toString(36).slice(2);
+const feed=document.getElementById("feed"),form=document.getElementById("form"),
+  input=document.getElementById("q"),send=document.getElementById("send");
 
-document.getElementById("seed").addEventListener("click", e => {
-  if (e.target.tagName === "BUTTON") { input.value = e.target.textContent; input.focus(); }
-});
-
-function el(cls, html) { const d = document.createElement("div"); d.className = cls; if (html) d.innerHTML = html; return d; }
-
-function addYou(text) {
-  const m = el("msg you"); m.appendChild(el("who", "You"));
-  const p = document.createElement("div"); p.textContent = text; m.appendChild(p);
-  feed.appendChild(m); window.scrollTo(0, document.body.scrollHeight);
+function show(v){
+  document.querySelectorAll(".view").forEach(e=>e.classList.remove("active"));
+  document.getElementById(v).classList.add("active");
+  tabReport.classList.toggle("active",v==="report");
+  tabMonitor.classList.toggle("active",v==="monitor");
+  form.style.display=v==="report"?"block":"none";
+  if(v==="monitor")refreshStatus();
 }
+document.getElementById("seed").addEventListener("click",e=>{
+  if(e.target.tagName==="BUTTON"){input.value=e.target.textContent;input.focus();}});
 
-function addBot(data) {
-  const m = el("msg bot"); m.appendChild(el("who", "InsightDesk"));
-  const ans = document.createElement("div"); ans.textContent = data.answer; m.appendChild(ans);
+function el(c,h){const d=document.createElement("div");d.className=c;if(h)d.innerHTML=h;return d;}
+function addYou(t){const m=el("msg you");m.appendChild(el("who","You"));
+  const p=document.createElement("div");p.textContent=t;m.appendChild(p);feed.appendChild(m);
+  window.scrollTo(0,document.body.scrollHeight);}
+function addBot(d){const m=el("msg bot");m.appendChild(el("who","InsightDesk"));
+  const a=document.createElement("div");a.textContent=d.answer;m.appendChild(a);
+  if(d.chart)m.appendChild(renderChart(d.chart));
+  if(d.spec){const s=el("spec");s.textContent="query "+JSON.stringify(compact(d.spec));m.appendChild(s);}
+  feed.appendChild(m);window.scrollTo(0,document.body.scrollHeight);}
+function compact(s){const o={agg:s.agg,metric:s.metric};
+  if(s.group_by&&s.group_by.length)o.group_by=s.group_by;
+  if(s.filters&&s.filters.length)o.filters=s.filters.map(f=>`${f.field} ${f.op} ${f.value}`);return o;}
+function renderChart(c){const card=el("chart-card");const cv=document.createElement("canvas");card.appendChild(cv);
+  const sig="#4ea1d3",amb="#f5a623",isA=i=>c.anomaly_indices.includes(i);
+  const cols=c.values.map((_,i)=>isA(i)?amb:sig);
+  setTimeout(()=>{new Chart(cv,{type:c.type,data:{labels:c.labels,datasets:[{label:c.metric,data:c.values,
+    backgroundColor:c.type==="bar"?cols:"rgba(78,161,211,.12)",borderColor:c.type==="line"?sig:cols,
+    pointBackgroundColor:cols,pointRadius:c.type==="line"?c.values.map((_,i)=>isA(i)?6:3):undefined,
+    borderWidth:2,tension:.25,fill:c.type==="line"}]},
+    options:{plugins:{legend:{labels:{color:"#8696a7"}}},
+    scales:{x:{ticks:{color:"#8696a7",maxRotation:0,autoSkip:true},grid:{color:"#22303f"}},
+    y:{ticks:{color:"#8696a7"},grid:{color:"#22303f"}}}}});},0);
+  return card;}
 
-  if (data.anomalies && data.anomalies.length) {
-    const a = data.anomalies[0];
-    m.appendChild(el("anom",
-      `Anomaly: <b>${a.label}</b> reads as a <b>${a.direction}</b> versus the baseline.`));
-  }
-  if (data.chart) m.appendChild(renderChart(data.chart));
-  if (data.spec) {
-    const s = el("spec"); s.textContent = "query " + JSON.stringify(compactSpec(data.spec));
-    m.appendChild(s);
-  }
-  feed.appendChild(m); window.scrollTo(0, document.body.scrollHeight);
+async function ask(q){addYou(q);send.disabled=true;input.value="";
+  const t=el("msg bot",'<div class="who">InsightDesk</div><div style="color:#8696a7">analyzing…</div>');
+  feed.appendChild(t);window.scrollTo(0,document.body.scrollHeight);
+  try{const r=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({question:q,session_id:sessionId})});const d=await r.json();t.remove();addBot(d);}
+  catch(e){t.remove();addBot({answer:"Server error — check it's running."});}
+  finally{send.disabled=false;input.focus();}}
+form.addEventListener("submit",e=>{e.preventDefault();const q=input.value.trim();if(q)ask(q);});
+
+/* ---- monitoring ---- */
+let pollTimer=null;
+function renderMon(data){
+  const s=data.summary||{};
+  document.getElementById("strip").innerHTML=
+    `<div><div class="k">Sim clock</div><div class="v">${(s.clock||"—").slice(11,19)||"—"}</div></div>
+     <div><div class="k">Msgs / window</div><div class="v">${s.messages??"—"}</div></div>
+     <div><div class="k">Delivery rate</div><div class="v">${s.delivery_rate!=null?(s.delivery_rate*100).toFixed(0)+"%":"—"}</div></div>
+     <div><div class="k">Open</div><div class="v" style="color:var(--amber)">${(s.counts&&s.counts.open)||0}</div></div>
+     <div><div class="k">Blocked</div><div class="v" style="color:var(--red)">${(s.counts&&s.counts.blocked)||0}</div></div>`;
+  const list=document.getElementById("escList");
+  const open=data.open||[];
+  if(!open.length){list.innerHTML='<div class="empty">No open escalations. Start the monitor or feed traffic…</div>';return;}
+  list.innerHTML="";
+  open.forEach(e=>{
+    const card=el("esc "+e.severity);
+    const route=Object.values(e.route).join(" / ");
+    card.innerHTML=
+      `<div class="top"><span class="sev ${e.severity}">${e.severity}</span>
+        <span class="rule">${e.rule.replace(/_/g," ")}</span>
+        <span class="route">${route}</span></div>
+       <div class="reason">${e.reason}</div>
+       <div class="act"><span class="rec">▶ ${e.recommended_action}</span>
+        <button class="block" onclick="act('${e.id}','block')">Block route</button>
+        <button class="dismiss" onclick="act('${e.id}','dismiss')">Dismiss</button></div>`;
+    list.appendChild(card);
+  });
 }
-
-function compactSpec(s) {
-  const o = { agg: s.agg, metric: s.metric };
-  if (s.group_by && s.group_by.length) o.group_by = s.group_by;
-  if (s.filters && s.filters.length) o.filters = s.filters.map(f => `${f.field}${f.op==="eq"?"=":" "+f.op+" "}${f.value}`);
-  return o;
-}
-
-function renderChart(c) {
-  const card = el("chart-card");
-  const canvas = document.createElement("canvas"); card.appendChild(canvas);
-  const signal = "#4ea1d3", anomaly = "#f5a623";
-  const isAnom = i => c.anomaly_indices.includes(i);
-  const colors = c.values.map((_, i) => isAnom(i) ? anomaly : signal);
-  setTimeout(() => {
-    new Chart(canvas, {
-      type: c.type,
-      data: {
-        labels: c.labels,
-        datasets: [{
-          label: c.metric, data: c.values,
-          backgroundColor: c.type === "bar" ? colors : "rgba(78,161,211,.12)",
-          borderColor: c.type === "line" ? signal : colors,
-          pointBackgroundColor: colors,
-          pointRadius: c.type === "line" ? c.values.map((_, i) => isAnom(i) ? 6 : 3) : undefined,
-          borderWidth: 2, tension: .25, fill: c.type === "line",
-        }]
-      },
-      options: {
-        plugins: { legend: { labels: { color: "#8696a7" } } },
-        scales: {
-          x: { ticks: { color: "#8696a7", maxRotation: 0, autoSkip: true }, grid: { color: "#22303f" } },
-          y: { ticks: { color: "#8696a7" }, grid: { color: "#22303f" } }
-        }
-      }
-    });
-  }, 0);
-  return card;
-}
-
-async function ask(question) {
-  addYou(question);
-  send.disabled = true; input.value = "";
-  const skill = document.getElementById("skill").value.trim();
-  const thinking = el("msg bot", '<div class="who">InsightDesk</div><div style="color:#8696a7">analyzing…</div>');
-  feed.appendChild(thinking); window.scrollTo(0, document.body.scrollHeight);
-  try {
-    const res = await fetch("/ask", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, session_id: sessionId, anomaly_skill: skill || null })
-    });
-    const data = await res.json();
-    thinking.remove();
-    addBot(data);
-    const state = document.getElementById("skillState");
-    state.textContent = data.skill ? `active: ${data.skill}` : "";
-  } catch (err) {
-    thinking.remove();
-    addBot({ answer: "Something went wrong reaching the server. Check it's running and try again." });
-  } finally { send.disabled = false; input.focus(); }
-}
-
-form.addEventListener("submit", e => {
-  e.preventDefault();
-  const q = input.value.trim();
-  if (q) ask(q);
-});
+function startPoll(){if(pollTimer)return;
+  pollTimer=setInterval(async()=>{const d=await(await fetch("/monitor/status")).json();
+    renderMon(d);if(d.done)stopPoll(true);},1500);}
+function stopPoll(done){if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  const b=document.getElementById("autoBtn");b.classList.remove("on");
+  b.textContent=done?"Auto: done":"Auto: off";}
+async function feedOnce(){const d=await(await fetch("/feed",{method:"POST"})).json();renderMon(d);
+  if(d.done)stopPoll(true);}
+async function toggleAuto(){const b=document.getElementById("autoBtn");
+  const st=await(await fetch("/monitor/status")).json();
+  if(st.running){await fetch("/monitor/stop",{method:"POST"});stopPoll(false);}
+  else{await fetch("/monitor/start",{method:"POST"});b.textContent="Auto: on";b.classList.add("on");startPoll();}}
+async function act(id,action){await fetch("/action",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({escalation_id:id,action})});renderMon(await(await fetch("/escalations")).json());}
+async function resetMon(){await fetch("/monitor/stop",{method:"POST"});stopPoll(false);
+  await fetch("/reset",{method:"POST"});renderMon(await(await fetch("/escalations")).json());}
+async function refreshStatus(){const st=await(await fetch("/monitor/status")).json();renderMon(st);
+  const b=document.getElementById("autoBtn");
+  if(st.running){b.textContent="Auto: on";b.classList.add("on");startPoll();}
+  else if(st.done){b.textContent="Auto: done";}}
 </script>
 </body>
 </html>

@@ -1,21 +1,31 @@
 """
-InsightDesk web app — the live, shareable demo (your capstone project link).
+InsightDesk (SMS traffic edition) — web app.
 
-Serves a single-page chat UI and a /ask endpoint that runs the agent and returns
-the answer, the spec, the rows, the anomalies, and chart-ready data. Per-session
-memory lets follow-up questions resolve against earlier ones.
+Two surfaces over one CDR dataset:
+  - Reporting agent: natural-language questions -> validated query -> answer+chart.
+  - Monitoring portal: an ambient agent that ingests CDR batches, raises route
+    escalations, and lets a human block or dismiss them.
 
-Run locally:
-    export GEMINI_API_KEY=...        # your AI Studio key
-    uvicorn insightdesk.web.app:app --reload
-    # then open http://localhost:8000
+The monitoring agent can run as a real server-side background loop: once started
+it advances the traffic stream and re-evaluates the rules on a timer, so
+escalations accumulate even with no browser open. Start it from the portal's
+Auto button, via POST /monitor/start, or at boot with INSIGHTDESK_AUTORUN=1.
 
-Offline UI test (no key — canned answers for a few demo questions):
+Run:
+    export GEMINI_API_KEY=...
+    uvicorn insightdesk.web.app:app --reload     # http://localhost:8000
+Offline UI test:
     INSIGHTDESK_MOCK=1 uvicorn insightdesk.web.app:app
 """
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
+
+import asyncio
 import os
+import threading
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -26,18 +36,31 @@ from ..agent.llm import LLM, MockLLM
 from ..agent.orchestrator import InsightAgent, Turn
 from ..agent.spec_agent import SpecError
 from ..agent.trace import JsonlTracer
-from ..backends.duckdb_backend import DuckDBBackend
+from ..backends.cdr_backend import CDRBackend
+from ..monitor.engine import MonitoringAgent
+from ..monitor.stream import CDRStream
 
-DB = os.environ.get("INSIGHTDESK_DB", "insightdesk/data/insightdesk.duckdb")
+DB = os.environ.get("INSIGHTDESK_DB", "insightdesk/data/cdr.duckdb")
+PARQUET = os.environ.get("INSIGHTDESK_PARQUET", "insightdesk/data/cdr.parquet")
+BATCH_MIN = int(os.environ.get("INSIGHTDESK_BATCH_MIN", "5"))
 STATIC = Path(__file__).parent / "static"
 
-app = FastAPI(title="InsightDesk")
+app = FastAPI(title="InsightDesk — SMS Traffic")
 
-# Shared, read-only backend + tracer; one agent per session for separate memory.
-_backend = DuckDBBackend(DB)
-_tracer = JsonlTracer(os.environ.get("INSIGHTDESK_TRACE", "traces.jsonl"))
+_backend = CDRBackend(DB)
+_tracer = JsonlTracer(os.environ.get("INSIGHTDESK_TRACE", "/tmp/traces.jsonl"))
 _agents: dict[str, InsightAgent] = {}
 
+# Shared monitoring state. The lock guards stream-advance + evaluate so the
+# manual /feed endpoint and the background loop never race.
+_monitor = MonitoringAgent()
+_stream = CDRStream(PARQUET, batch_min=BATCH_MIN)
+_lock = threading.Lock()
+_bg = {"running": False, "done": False, "task": None,
+       "interval": float(os.environ.get("INSIGHTDESK_AUTORUN_INTERVAL", "2.0"))}
+
+
+# -- reporting --------------------------------------------------------------
 
 def _make_llm() -> LLM:
     if os.environ.get("INSIGHTDESK_MOCK") == "1":
@@ -48,14 +71,11 @@ def _make_llm() -> LLM:
 
 def _agent_for(session_id: str) -> InsightAgent:
     if session_id not in _agents:
-        _agents[session_id] = InsightAgent(
-            backend=_backend, llm=_make_llm(), tracer=_tracer
-        )
+        _agents[session_id] = InsightAgent(backend=_backend, llm=_make_llm(), tracer=_tracer)
     return _agents[session_id]
 
 
 def _chart(turn: Turn) -> dict | None:
-    """Shape rows into Chart.js-ready data; mark anomalous points."""
     rows = turn.rows
     if not rows or "value" not in rows[0]:
         return None
@@ -66,20 +86,47 @@ def _chart(turn: Turn) -> dict | None:
     labels = [str(r.get(label_key)) for r in rows]
     values = [r["value"] for r in rows]
     anomaly_labels = {str(a["label"]) for a in turn.anomalies}
-    anomaly_idx = [i for i, l in enumerate(labels) if l in anomaly_labels]
-    return {
-        "type": "line" if is_time else "bar",
-        "labels": labels,
-        "values": values,
-        "anomaly_indices": anomaly_idx,
-        "metric": turn.spec.metric,
-    }
+    return {"type": "line" if is_time else "bar", "labels": labels, "values": values,
+            "anomaly_indices": [i for i, l in enumerate(labels) if l in anomaly_labels],
+            "metric": turn.spec.metric}
 
 
 class AskRequest(BaseModel):
     question: str
     session_id: str = "default"
-    anomaly_skill: str | None = None   # built-in name or a plain-English rule
+    anomaly_skill: str | None = None
+
+
+# Optional ADK reporting path (set INSIGHTDESK_ADK=1). Falls back to the
+# hand-built agent otherwise, so this is safe to ship either way.
+_adk_service = None
+
+
+def _adk():
+    global _adk_service
+    if _adk_service is None:
+        from ..adk.reporting_agent import build_reporting_agent
+        from ..adk.service import ADKService
+        _adk_service = ADKService(build_reporting_agent())
+    return _adk_service
+
+
+def _chart_from_report(report: dict) -> dict | None:
+    rows = report.get("rows") or []
+    spec = report.get("spec") or {}
+    if not rows or "value" not in rows[0]:
+        return None
+    is_time = "bucket" in rows[0]
+    gb = spec.get("group_by") or []
+    label_key = "bucket" if is_time else (gb[0] if gb else None)
+    if label_key is None:
+        return None
+    labels = [str(r.get(label_key)) for r in rows]
+    anomaly_labels = {str(a["label"]) for a in report.get("anomalies", [])}
+    return {"type": "line" if is_time else "bar", "labels": labels,
+            "values": [r["value"] for r in rows],
+            "anomaly_indices": [i for i, l in enumerate(labels) if l in anomaly_labels],
+            "metric": spec.get("metric")}
 
 
 @app.get("/")
@@ -89,68 +136,166 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"ok": True, "mock": os.environ.get("INSIGHTDESK_MOCK") == "1"}
-
-
-def _apply_skill(agent, source: str | None) -> str | None:
-    """Set the agent's anomaly skill from a name/instruction; cache by source
-    so a custom instruction is compiled at most once per session."""
-    if not source:
-        agent.anomaly_skill = None
-        agent._skill_src = None
-        return None
-    if getattr(agent, "_skill_src", None) != source:
-        from ..agent.skills import resolve_skill
-        agent.anomaly_skill = resolve_skill(source, agent.llm, agent.backend.get_schema())
-        agent._skill_src = source
-    return agent.anomaly_skill.name
+    return {"ok": True, "mock": os.environ.get("INSIGHTDESK_MOCK") == "1",
+            "adk": os.environ.get("INSIGHTDESK_ADK") == "1"}
 
 
 @app.post("/ask")
 def ask(req: AskRequest) -> dict:
+    if os.environ.get("INSIGHTDESK_ADK") == "1":
+        import asyncio
+        try:
+            out = asyncio.run(_adk().ask(req.question, session_id=req.session_id))
+        except Exception as e:
+            return {"ok": False, "answer": f"ADK agent error: {e}"}
+        report = out.get("report") or {}
+        return {"ok": True, "answer": out.get("answer", ""),
+                "spec": report.get("spec"), "rows": (report.get("rows") or [])[:50],
+                "anomalies": report.get("anomalies", []),
+                "chart": _chart_from_report(report) if report else None}
     agent = _agent_for(req.session_id)
-    try:
-        skill_name = _apply_skill(agent, req.anomaly_skill)
-    except ValueError as e:
-        return {"ok": False, "answer": f"Couldn't apply that anomaly rule: {e}"}
+    if req.anomaly_skill:
+        try:
+            from ..agent.skills import resolve_skill
+            agent.anomaly_skill = resolve_skill(req.anomaly_skill, agent.llm, _backend.get_schema())
+        except ValueError as e:
+            return {"ok": False, "answer": f"Couldn't apply that anomaly rule: {e}"}
+    else:
+        agent.anomaly_skill = None
     try:
         turn = agent.ask(req.question)
     except SpecError as e:
         return {"ok": False, "answer": f"I can't answer that from this dataset: {e}"}
-    return {
-        "ok": True,
-        "answer": turn.answer,
-        "spec": turn.spec.to_dict(),
-        "rows": turn.rows[:50],
-        "anomalies": turn.anomalies,
-        "chart": _chart(turn),
-        "skill": skill_name,
-    }
+    return {"ok": True, "answer": turn.answer, "spec": turn.spec.to_dict(),
+            "rows": turn.rows[:50], "anomalies": turn.anomalies, "chart": _chart(turn)}
+
+
+# -- monitoring portal ------------------------------------------------------
+
+class ActionRequest(BaseModel):
+    escalation_id: str
+    action: str
+
+
+def _advance_once() -> int | None:
+    """Advance the stream by one batch and evaluate. Returns batch size, or
+    None when the stream is exhausted. Thread-safe."""
+    with _lock:
+        if not _stream.has_next():
+            return None
+        batch = _stream.next_batch()
+        if not batch.empty:
+            _monitor.ingest(batch)
+            _monitor.evaluate()
+        return int(len(batch))
+
+
+def _snapshot() -> dict:
+    with _lock:
+        return {"summary": _monitor.window_summary(),
+                "open": [e.to_dict() for e in _monitor.store.open()],
+                "counts": _monitor.store.counts()}
+
+
+def _status() -> dict:
+    snap = _snapshot()
+    return {"running": _bg["running"], "interval": _bg["interval"],
+            "done": _bg["done"], "has_next": _stream.has_next(), **snap}
+
+
+async def _bg_loop() -> None:
+    while _bg["running"]:
+        size = await asyncio.to_thread(_advance_once)
+        if size is None:
+            _bg["running"] = False
+            _bg["done"] = True
+            break
+        await asyncio.sleep(_bg["interval"])
+
+
+@app.on_event("startup")
+async def _maybe_autostart() -> None:
+    if os.environ.get("INSIGHTDESK_AUTORUN") == "1":
+        _bg["running"] = True
+        _bg["done"] = False
+        _bg["task"] = asyncio.create_task(_bg_loop())
+
+
+@app.post("/monitor/start")
+async def monitor_start(interval: float | None = None) -> dict:
+    if interval:
+        _bg["interval"] = max(0.2, float(interval))
+    if not _bg["running"] and _stream.has_next():
+        _bg["running"] = True
+        _bg["done"] = False
+        _bg["task"] = asyncio.create_task(_bg_loop())
+    return _status()
+
+
+@app.post("/monitor/stop")
+async def monitor_stop() -> dict:
+    _bg["running"] = False
+    return _status()
+
+
+@app.get("/monitor/status")
+def monitor_status() -> dict:
+    return _status()
+
+
+@app.post("/feed")
+def feed() -> dict:
+    """Manually advance one batch (works whether or not the bg loop is running)."""
+    size = _advance_once()
+    snap = _snapshot()
+    return {"done": size is None, "batch_size": size or 0, **snap}
+
+
+@app.get("/escalations")
+def escalations() -> dict:
+    return _snapshot()
+
+
+@app.post("/action")
+def action(req: ActionRequest) -> dict:
+    with _lock:
+        if req.action == "block":
+            esc = _monitor.store.block(req.escalation_id)
+        elif req.action == "dismiss":
+            esc = _monitor.store.dismiss(req.escalation_id)
+        else:
+            return {"ok": False, "error": "action must be block or dismiss"}
+        counts = _monitor.store.counts()
+    return {"ok": esc is not None, "escalation": esc.to_dict() if esc else None,
+            "counts": counts}
+
+
+@app.post("/reset")
+async def reset() -> dict:
+    global _monitor, _stream
+    _bg["running"] = False
+    await asyncio.sleep(0)
+    with _lock:
+        _monitor = MonitoringAgent()
+        _stream = CDRStream(PARQUET, batch_min=BATCH_MIN)
+        _bg["done"] = False
+    return {"ok": True}
 
 
 def _demo_mock() -> MockLLM:
-    """Canned answers so the UI works offline without a key (limited set)."""
     def json_fn(system: str, user: str) -> dict:
         u = user.lower().split("new question:")[-1]
-        if "region" in u and "cost" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["region"]}
-        if "europe" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["__time__"],
-                    "granularity": "month",
-                    "filters": [{"field": "region", "op": "eq", "value": "Europe"}],
-                    "order_by": "bucket", "order_desc": False}
-        if "product" in u:
-            return {"metric": "message_count", "agg": "sum", "group_by": ["product"]}
-        return {"error": "mock only handles: cost by region, Europe trend, by product"}
+        if "delivery rate" in u and "country" in u:
+            return {"metric": "delivered", "agg": "avg", "group_by": ["country_name"]}
+        if "profit" in u and "vendor" in u:
+            return {"metric": "profit", "agg": "sum", "group_by": ["vendor_name"]}
+        if "messages" in u or "volume" in u or "traffic" in u:
+            return {"metric": "message_count", "agg": "count", "group_by": ["country_name"]}
+        return {"error": "mock handles: delivery rate by country, profit by vendor, volume by country"}
 
     def text_fn(system: str, user: str) -> str:
         import json
         p = json.loads(user)
-        a = p.get("anomalies", [])
-        base = f"Here are the results across {len(p['results'])} groups."
-        if a:
-            x = a[0]
-            base += (f" Note an anomaly: {x.get('label')} looks like a "
-                     f"{x.get('direction')} versus the baseline.")
-        return base
+        return f"Results across {len(p['results'])} groups." + (
+            f" Anomaly: {p['anomalies'][0]['label']}." if p.get("anomalies") else "")
     return MockLLM(json_responses=json_fn, text_responses=text_fn)

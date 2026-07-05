@@ -18,12 +18,12 @@ import sys
 from collections import defaultdict
 
 from ..backends.base import SchemaInfo
-from ..backends.duckdb_backend import DuckDBBackend
+from ..backends.cdr_backend import CDRBackend
 from ..agent.llm import LLM, MockLLM
 from ..agent.spec_agent import SpecError, text_to_spec
 from .cases import CASES, EvalCase
 
-DB = "insightdesk/data/insightdesk.duckdb"
+DB = "insightdesk/data/cdr.duckdb"
 
 
 def _mock_llm() -> MockLLM:
@@ -31,30 +31,26 @@ def _mock_llm() -> MockLLM:
     def json_fn(system: str, user: str) -> dict:
         u = user.lower()
         if "validation error" in u:
-            return {"error": "cannot answer with this schema"}  # don't fake a fix
-        if "cost per region" in u and "whatsapp" not in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["region"]}
-        if "each product" in u:
-            return {"metric": "message_count", "agg": "sum", "group_by": ["product"]}
-        if "overall" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": []}
-        if "cost for sms" in u:
-            return {"metric": "cost", "agg": "sum",
-                    "filters": [{"field": "product", "op": "eq", "value": "SMS"}]}
-        if "whatsapp" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["region"],
-                    "filters": [{"field": "product", "op": "eq", "value": "WhatsApp"}]}
-        if "europe" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["__time__"],
-                    "granularity": "month",
-                    "filters": [{"field": "region", "op": "eq", "value": "Europe"}]}
-        if "daily message volume" in u:
-            return {"metric": "message_count", "agg": "sum",
-                    "group_by": ["__time__"], "granularity": "day"}
-        if "top clients" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["client_id"]}
-        if "country" in u:
-            return {"metric": "cost", "agg": "sum", "group_by": ["country"]}
+            return {"error": "cannot answer with this schema"}
+        if "delivery rate by country" in u:
+            return {"metric": "delivered", "agg": "avg", "group_by": ["country_name"]}
+        if "profit by vendor" in u:
+            return {"metric": "profit", "agg": "sum", "group_by": ["vendor_name"]}
+        if "total messages overall" in u:
+            return {"metric": "message_count", "agg": "count", "group_by": []}
+        if "transactional" in u:
+            return {"metric": "delivered", "agg": "avg",
+                    "filters": [{"field": "content_type", "op": "eq", "value": "transactional"}]}
+        if "messages to india" in u:
+            return {"metric": "message_count", "agg": "count",
+                    "filters": [{"field": "country_name", "op": "eq", "value": "India"}]}
+        if "hourly message volume" in u:
+            return {"metric": "message_count", "agg": "count",
+                    "group_by": ["__time__"], "granularity": "hour"}
+        if "operators by delivery rate" in u:
+            return {"metric": "delivered", "agg": "avg", "group_by": ["operator_name"]}
+        if "ip address" in u:
+            return {"metric": "cost", "agg": "sum", "group_by": ["ip_address"]}
         if "salesperson" in u or "revenue" in u:
             return {"metric": "revenue", "agg": "avg", "group_by": ["salesperson"]}
         return {"error": "unhandled"}
@@ -100,7 +96,7 @@ def main() -> None:
         from ..agent.llm import GeminiLLM
         llm = GeminiLLM()
 
-    schema = DuckDBBackend(args.db).get_schema()
+    schema = CDRBackend(args.db).get_schema()
 
     by_cat: dict[str, list[bool]] = defaultdict(list)
     print(f"{'cat':<12} {'result':<6} question")

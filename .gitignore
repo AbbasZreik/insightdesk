@@ -4,3 +4,4 @@ insightdesk/data/*.duckdb
 insightdesk/data/*.parquet
 traces.jsonl
 .venv/
+.env

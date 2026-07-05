@@ -1,141 +1,122 @@
-# InsightDesk — natural-language business analytics agent
+# InsightDesk — SMS Traffic Intelligence
 
-A capstone-ready agent (Agents for Business track) that turns plain-English
-questions into validated aggregation queries over a messaging/billing dataset,
-flags anomalies, and returns a narrated answer plus a chart.
+An agentic system over A2P SMS call-detail records (CDR). Two surfaces:
 
-This repository is a **clean, synthetic-data demonstration** of an agent pattern
-— it deliberately ships no proprietary code or real customer data.
+- **Reporting agent** — ask about traffic in plain English ("delivery rate by
+  operator", "profit by vendor"); it builds a validated query, runs it, flags
+  anomalies, and answers with a chart.
+- **Ambient monitoring agent** — watches CDR traffic as it arrives, evaluates
+  enterprise rules per route, and raises **escalations** to a portal where a
+  human can **block** or **dismiss** a bad route.
 
-## Why two backends
+Built for the Google × Kaggle 5-Day AI Agents capstone (Agents for Business).
 
-The agent only ever produces a backend-agnostic `AggregationSpec`. Two adapters
-implement the same contract:
+## Core principle
 
-| Backend | Role | Why |
-|---|---|---|
-| **DuckDB** (`backends/duckdb_backend.py`) | Public live demo | Single file, zero services — runs on a free tier and never goes down during judging. |
-| **Elasticsearch** (`backends/es_backend.py`) | Production showcase | Demonstrates real aggregation-DSL engineering; swap in with one line. |
-
-Swapping is a single construction change; the agent code is identical:
-
-```python
-from insightdesk.backends.duckdb_backend import DuckDBBackend
-backend = DuckDBBackend("insightdesk/data/insightdesk.duckdb")
-# or, for the production path:
-# from insightdesk.backends.es_backend import ESBackend
-# backend = ESBackend("http://localhost:9200")
-```
+The model does language; deterministic code does data. The model turns a
+question into a query spec and a rule-instruction into a rule — it never writes
+SQL, never decides what counts as an anomaly, and never invents a number.
 
 ## Quickstart
 
 ```bash
 pip install -r requirements.txt
-python -m insightdesk.data.seed --out insightdesk/data --days 180 --seed 42
+python -m insightdesk.data.cdr_seed            # generate CDR data + scenarios
 
-# offline pipeline test — no API key, no network, no quota:
-python -m insightdesk.tests.test_pipeline
-
-# live agent on YOUR Gemini key (independent of Antigravity's quota):
-export GEMINI_API_KEY=...        # from Google AI Studio
-python -m insightdesk.run_agent "What is the monthly cost trend for Europe?"
-python -m insightdesk.run_agent  # interactive REPL, remembers context
-
-# spec-accuracy evals (offline mock, or real model):
+# offline checks (no key):
+python -m insightdesk.tests.test_monitor       # ambient agent on the stream
+python -m insightdesk.monitor.simulate         # watch escalations stream live
+python -m insightdesk.tests.test_skills
 python -m insightdesk.eval.run_eval --mock
-python -m insightdesk.eval.run_eval            # uses your key
 
-# web demo (the live project link):
-uvicorn insightdesk.web.app:app --reload       # http://localhost:8000
-INSIGHTDESK_MOCK=1 uvicorn insightdesk.web.app:app   # offline UI test, no key
+# live (your Gemini key):
+export GEMINI_API_KEY=...
+python -m insightdesk.run_agent "delivery rate by operator"
+uvicorn insightdesk.web.app:app                # http://localhost:8000
 ```
 
-That writes `events.parquet`, `clients.parquet`, and a ready-to-query
-`insightdesk.duckdb` with three reproducible planted anomalies:
+## The dataset (CDR)
 
-1. **Usage spike** — Falcon Media (C001) SMS volume ×8 for one week.
-2. **Revenue dip** — Europe billed cost −40% for one month.
-3. **Churn** — Summit Logistics (C008) goes silent after day 120.
+One row per message: `cdr_id, created_ts, delivery_ts, client_id, vendor_id,
+country, operator, sender, content_type (promotional|transactional),
+delivery_status, rate, cost, profit, latency`. Metrics: message_count, cost,
+profit, rate, delivery_rate (avg of delivered), latency. Four planted scenarios:
+route degradation, fraud surge, margin leak, OTP failure.
 
-Edit the `ANOMALIES` dict in `data/seed.py` to control exactly what the agent
-should catch.
+## Ambient operation
 
-## How a question flows
+The monitoring agent runs as a real server-side loop. Click **Auto** in the
+portal (or POST `/monitor/start`, or boot with `INSIGHTDESK_AUTORUN=1`) and the
+server advances the traffic stream and re-evaluates the rules on a timer —
+escalations accumulate even with no browser open. **Feed next batch** steps one
+batch manually; **Block route** is the human-approved action; **Reset** restarts
+the stream.
 
-```
-question
-  -> [spec_agent] Gemini emits a JSON AggregationSpec, grounded in the schema
-  -> [validate_spec] reject anything off-schema (one self-repair retry)
-  -> [backend] DuckDB / Elasticsearch runs the same spec
-  -> [anomaly] deterministic modified-z (time) / IQR (groups) flags outliers
-  -> [narrator] Gemini writes a short answer using ONLY the returned numbers
-```
+## Monitoring rules (skills)
 
-The model never writes SQL and never invents numbers; it only produces a spec
-and narrates verified results.
+Named business rules evaluated per route window: `route_degradation` (delivery
+< 65%), `otp_failure` (transactional delivery < 80%, critical), `traffic_surge`
+(volume >> baseline), `margin_leak` (loss-making route). Each carries a severity
+and a recommended action. New rules can be defined in plain English and compiled.
 
-## Project layout
+## Course concepts (≥3 required; this applies six)
+
+- **Multi-agent (Day 1)** — separate reporting and monitoring agents.
+- **Tools (Day 2)** — schema/query tools; the human block step is a
+  long-running operation with approval.
+- **Memory (Day 3)** — multi-turn reporting follow-ups.
+- **Skills (Day 3)** — anomaly rules as named, instruction-definable skills.
+- **Quality & guardrails + evals (Day 4)** — spec/rule validation; eval harness.
+- **Ambient + production (Day 5)** — event-driven monitoring, tracing, deployed.
+
+## Layout
 
 ```
 insightdesk/
-  data/seed.py                 synthetic data + planted anomalies
-  backends/base.py             AggregationSpec, SchemaInfo, validate_spec(), ABC
-  backends/duckdb_backend.py   demo adapter (spec -> SQL)
-  backends/es_backend.py       production adapter (spec -> ES composite agg)
-  agent/llm.py                 LLM interface, GeminiLLM (your key), MockLLM
-  agent/prompts.py             schema-aware spec + grounded-narration prompts
-  agent/spec_agent.py          NL -> validated spec, with self-repair retry
-  agent/anomaly.py             deterministic anomaly detection (statistics)
-  agent/skills.py              anomaly Skills: named/instruction-defined detectors
-  agent/orchestrator.py        InsightAgent: ties it together + session memory
-  agent/trace.py               structured JSONL tracing (observability)
-  eval/cases.py                question -> expected-spec eval set
-  eval/run_eval.py             eval runner (spec accuracy per category)
-  web/app.py                   FastAPI: /ask endpoint + chat UI (the live demo)
-  web/static/index.html        Chart.js frontend; anomalies highlighted amber
-  tests/test_pipeline.py       full offline pipeline test (MockLLM)
-  run_agent.py                 CLI (single question or REPL)
-  requirements.txt
+  data/cdr_seed.py             CDR generator + planted scenarios
+  backends/cdr_backend.py      reporting aggregations (spec -> SQL)
+  agent/                       llm, prompts, spec_agent, skills, anomaly,
+                               orchestrator, trace  (reporting agent)
+  monitor/                     rules, escalation, engine, stream  (ambient agent)
+  web/app.py + static/         reporting chat + monitoring portal
+  eval/                        spec-accuracy eval set + runner
+  tests/                       test_monitor, test_skills
+  run_agent.py                 reporting CLI
 ```
 
-## Course concepts demonstrated (capstone requires ≥3)
+## MCP server (read-only)
 
-- **Tools / MCP (Day 2)** — `get_schema()` and `run_aggregation()` are the agent's
-  two tools; expose them over MCP.
-- **Sessions & memory (Day 3)** — multi-turn follow-ups ("now break that down by
-  region") reuse prior context.
-- **Skills (Day 3)** — anomaly detection is a library of named, reusable skills
-  (`agent/skills.py`); an analyst can define a new one in plain English ("flag
-  regions billing below 80% of the top"), which the model compiles once into a
-  validated rule, then applies deterministically.
-- **Quality & guardrails (Day 4)** — `validate_spec()` and `validate_rule()`
-  reject anything off-schema or malformed before it runs; an eval set scores
-  query accuracy.
-- **Prototype → production (Day 5)** — tool-call tracing + the dual-backend design
-  + the deployed live link.
+The system exposes its tools over the Model Context Protocol so any MCP client
+(Claude, Gemini CLI, an ADK agent) can read traffic state — `get_schema`,
+`run_report`, `list_escalations`, `get_route_detail`, `get_window_summary`. By
+design there are **no action tools**: blocking/dismissing a route is always a
+human action in the portal, which bounds the agent to reads.
 
-The anomaly-detection layer (statistical or skill-defined, narrated by the
-agent) is the differentiator on top of the required concepts.
+```bash
+make mcp          # run the stdio MCP server
+```
 
-## Status
+## Evaluation (LLM-as-judge)
 
-- [x] Synthetic data generator with planted anomalies
-- [x] Backend contract + guardrail validation
-- [x] DuckDB adapter (tested)
-- [x] Elasticsearch adapter (skeleton — smoke-test against live ES 8.x)
-- [x] Agent layer: NL -> validated spec, self-repair, session memory
-- [x] Anomaly detector (robust modified-z / IQR) + grounded narrator
-- [x] CLI (single question + REPL)
-- [x] Offline end-to-end test (MockLLM, no key)
-- [x] Eval set + runner (spec accuracy per category)
-- [x] Structured tracing / observability
-- [x] FastAPI + Chart.js web demo
-- [ ] Deploy the live link (Hugging Face Spaces / Render)
+`eval/judge.py` grades the reporting agent on two metrics — **output
+faithfulness** (answer uses only returned numbers) and **trajectory validity**
+(spec on-schema and on-target). The monitoring agent's reasoning is deterministic
+(skills) and is verified by `tests/test_monitor.py`, not judged.
 
-## Deploy the live link
+```bash
+make judge        # offline mock
+make eval         # spec-accuracy eval
+```
 
-Standard FastAPI service. Start command:
-`uvicorn insightdesk.web.app:app --host 0.0.0.0 --port $PORT`, set `GEMINI_API_KEY`
-as a secret, and ship the embedded `insightdesk.duckdb`. Because the demo backend
-is a single file, there is no database service to keep alive — the link stays up
-through judging.
+## Security
+
+See `SECURITY.md` for the STRIDE threat model and the "paved road" of secure
+conventions. Highlights: the model never takes a consequential action (no action
+tools; block is human-only), read-only data access, two input guardrails
+(`validate_spec`, `validate_rule`), deterministic detection, and structured
+tracing. Shift-left tooling: Semgrep pre-commit hooks and a `make security` scan.
+
+```bash
+make hooks        # install pre-commit (Semgrep + secret/hygiene checks)
+make security     # run the Semgrep security scan
+```

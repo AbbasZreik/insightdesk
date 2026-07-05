@@ -23,7 +23,7 @@ from typing import Any, Literal
 # ---------------------------------------------------------------------------
 
 AggFunc = Literal["sum", "avg", "count", "min", "max"]
-Granularity = Literal["day", "week", "month"]
+Granularity = Literal["minute", "hour", "day", "week", "month"]
 
 
 @dataclass
@@ -85,7 +85,7 @@ class SchemaInfo:
 # ---------------------------------------------------------------------------
 
 _VALID_AGGS = {"sum", "avg", "count", "min", "max"}
-_VALID_GRANULARITY = {None, "day", "week", "month"}
+_VALID_GRANULARITY = {None, "minute", "hour", "day", "week", "month"}
 _MAX_LIMIT = 1000
 
 

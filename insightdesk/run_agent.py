@@ -22,9 +22,9 @@ import sys
 from .agent.llm import DEFAULT_MODEL, GeminiLLM
 from .agent.orchestrator import InsightAgent
 from .agent.spec_agent import SpecError
-from .backends.duckdb_backend import DuckDBBackend
+from .backends.cdr_backend import CDRBackend
 
-DB = "insightdesk/data/insightdesk.duckdb"
+DB = "insightdesk/data/cdr.duckdb"
 
 
 def _print_turn(turn, debug: bool) -> None:
@@ -62,7 +62,7 @@ def main() -> None:
               file=sys.stderr)
         sys.exit(1)
 
-    agent = InsightAgent(backend=DuckDBBackend(args.db), llm=llm)
+    agent = InsightAgent(backend=CDRBackend(args.db), llm=llm)
 
     if args.skill:
         from .agent.skills import resolve_skill

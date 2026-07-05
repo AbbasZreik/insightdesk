@@ -21,7 +21,7 @@ Emit ONLY a JSON object with this shape (omit fields you don't need):
   "metric": "<one of the metrics below, or '*' with agg='count'>",
   "agg": "sum | avg | count | min | max",
   "group_by": ["<dimension>", "...", "__time__"],   // "__time__" buckets by time
-  "granularity": "day | week | month",              // only with "__time__"
+  "granularity": "minute | hour | day | week | month",  // only with "__time__"
   "filters": [
     {"field": "<dimension or the time field>", "op": "eq|in|gte|lte", "value": <v>}
   ],
@@ -51,12 +51,15 @@ def build_spec_system(schema: SchemaInfo) -> str:
             dims_with_values.append(f"  - {d}: (free-form / high cardinality)")
 
     return f"""\
-You translate business questions into a single aggregation query spec over a \
-messaging/billing dataset. Today the data is about message volume and cost.
+You translate business questions into a single aggregation query spec over an \
+SMS traffic dataset (CDR records: one row per message, with delivery status, \
+cost, rate, and profit).
 
-TIME FIELD: {schema.time_field} (an ISO date)
+TIME FIELD: {schema.time_field} (a timestamp; you may bucket by minute/hour/day)
 METRICS (numbers you may aggregate):
 {chr(10).join(f"  - {m}" for m in schema.metrics)}
+Note: delivery rate = metric "delivered" with agg "avg" (0..1). "message_count"
+counts rows. "profit" is margin (rate minus cost).
 DIMENSIONS (fields you may group by or filter on):
 {chr(10).join(dims_with_values)}
 

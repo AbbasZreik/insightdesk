@@ -1,0 +1,22 @@
+# LLM-as-judge configuration for the reporting agent.
+# Detection in the monitoring agent is deterministic (skills/rules) and is
+# verified by tests/test_monitor.py, so it is NOT judged here. The judge only
+# scores the part of the system that produces model-generated language.
+judge_model: gemini-2.5-flash
+question_set:
+  - "What is the delivery rate by country?"
+  - "Show profit by vendor."
+  - "How many messages went to each operator?"
+  - "What is the delivery rate for transactional traffic?"
+metrics:
+  - name: output_faithfulness
+    description: >
+      The narrated answer uses only values present in the returned rows. No
+      invented numbers, no claims unsupported by the data. PASS if every figure
+      in the answer traces to the data; FAIL on any fabricated or unsupported value.
+  - name: trajectory_validity
+    description: >
+      The generated query spec is on-schema and actually answers the question
+      asked (correct metric, grouping, and filters), and anomalies come from the
+      deterministic skill rather than the model. PASS if the spec is valid and
+      on-target; FAIL if it is off-schema or answers a different question.
